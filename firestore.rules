@@ -1,0 +1,103 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions for secure Role-Based Access Control (RBAC)
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if user is the designated primary admin or has admin role in Firestore / Custom Claims
+    function isPrimaryAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'gangalamit005@gmail.com' ||
+        request.auth.token.email == 'admin@studypro.in'
+      );
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        isPrimaryAdmin() ||
+        request.auth.token.role == 'admin' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN'
+      );
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // 1. Users Collection
+    // Users can read their own profile; only admins can list all users
+    // Users CANNOT change their own role to 'ADMIN' (prevents privilege escalation)
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && (
+        // Enforce that new users cannot self-assign the ADMIN role unless they are the primary admin email
+        request.resource.data.role == 'USER' || isPrimaryAdmin()
+      );
+      allow update: if isAdmin() || (
+        isOwner(userId) &&
+        // Prevent normal users from altering their role
+        request.resource.data.role == resource.data.role
+      );
+      allow delete: if isAdmin();
+    }
+
+    // 2. Exams Collection
+    match /exams/{examId} {
+      allow read: if true; // Publicly readable for students
+      allow write: if isAdmin(); // Only admins can create, edit, or delete exams
+    }
+
+    // 3. Syllabus Collection
+    match /syllabus/{syllabusId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 4. Tests Collection
+    match /tests/{testId} {
+      // Students can only read published tests; Admins can read drafts as well
+      allow read: if resource.data.isPublished == true || isAdmin();
+      allow write: if isAdmin(); // Only admins can create, edit, publish, or delete tests
+    }
+
+    // 5. Questions Collection (Question Bank)
+    match /questions/{questionId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin(); // Only admins can add, update, or remove questions
+    }
+
+    // 6. Test Attempts Collection (Exam Submissions)
+    match /test_attempts/{attemptId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // 7. CMS Content: Current Affairs, GK, Study Material
+    match /current_affairs/{id} {
+      allow read: if resource.data.isPublished == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /gk/{id} {
+      allow read: if resource.data.isPublished == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /study_materials/{id} {
+      allow read: if resource.data.isPublished == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // 8. System Settings
+    match /settings/{settingKey} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

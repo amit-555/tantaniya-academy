@@ -1,0 +1,6 @@
+{
+  "name": "Tantaniya Academy",
+  "description": "સરકારી પરીક્ષા તૈયારી - મોક ટેસ્ટ, પ્રશ્ન બેંક, સિલેબસ, કરંટ અફેર્સ અને એડમિન પેનલ (Tantaniya Academy)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
