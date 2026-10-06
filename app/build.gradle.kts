@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Base64
 
 plugins {
   alias(libs.plugins.android.application)
@@ -27,25 +28,13 @@ android {
     val customKeystoreFile = file(customKeystorePath)
     val hasCustomKeystore = customKeystoreFile.exists()
 
-    create("release") {
-      if (hasCustomKeystore) {
+    if (hasCustomKeystore) {
+      create("release") {
         storeFile = customKeystoreFile
         storePassword = System.getenv("STORE_PASSWORD") ?: "android"
         keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
         keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
-      } else {
-        // Fallback to debug keystore when custom production upload key is not yet placed in rootDir
-        storeFile = file("${rootDir}/debug.keystore")
-        storePassword = "android"
-        keyAlias = "androiddebugkey"
-        keyPassword = "android"
       }
-    }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
     }
   }
 
@@ -54,9 +43,17 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("release")
+      val hasCustomKeystore = signingConfigs.findByName("release") != null
+      signingConfig = if (hasCustomKeystore) {
+        signingConfigs.getByName("release")
+      } else {
+        signingConfigs.getByName("debug")
+      }
     }
-    debug { signingConfig = signingConfigs.getByName("debugConfig") }
+    debug {
+      // Standard Android debug signing configuration
+      signingConfig = signingConfigs.getByName("debug")
+    }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
@@ -79,6 +76,22 @@ secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
+}
+
+// Allow injecting google-services.json from CI environment variable if provided
+val googleServicesEnv = System.getenv("GOOGLE_SERVICES_JSON")
+val googleServicesBase64 = System.getenv("GOOGLE_SERVICES_BASE64")
+if (!googleServicesEnv.isNullOrBlank()) {
+  val targetFile = file("${projectDir}/google-services.json")
+  if (!targetFile.exists()) {
+    targetFile.writeText(googleServicesEnv)
+  }
+} else if (!googleServicesBase64.isNullOrBlank()) {
+  val targetFile = file("${projectDir}/google-services.json")
+  if (!targetFile.exists()) {
+    val decoded = Base64.getDecoder().decode(googleServicesBase64)
+    targetFile.writeBytes(decoded)
+  }
 }
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
