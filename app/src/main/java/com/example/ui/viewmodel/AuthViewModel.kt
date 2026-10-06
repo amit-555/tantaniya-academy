@@ -13,7 +13,10 @@ data class AuthUiState(
     val currentUser: UserEntity? = null,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val successMessage: String? = null
+    val successMessage: String? = null,
+    val notificationsEnabled: Boolean = true,
+    val darkThemeEnabled: Boolean = false,
+    val soundEnabled: Boolean = true
 )
 
 class AuthViewModel(private val repository: StudyProRepository) : ViewModel() {
@@ -120,5 +123,67 @@ class AuthViewModel(private val repository: StudyProRepository) : ViewModel() {
             repository.updateUser(updated)
             _uiState.value = _uiState.value.copy(currentUser = updated)
         }
+    }
+
+    fun updateProfileName(newName: String) {
+        val user = _uiState.value.currentUser ?: return
+        if (newName.isBlank()) {
+            _uiState.value = _uiState.value.copy(errorMessage = "કૃપા કરીને માન્ય નામ દાખલ કરો.")
+            return
+        }
+        viewModelScope.launch {
+            val updated = user.copy(name = newName.trim())
+            repository.updateUser(updated)
+            _uiState.value = _uiState.value.copy(
+                currentUser = updated,
+                successMessage = "પ્રોફાઇલ નામ સફળતાપૂર્વક બદલાઈ ગયું છે."
+            )
+        }
+    }
+
+    fun changePassword(currentPass: String, newPass: String, confirmPass: String): Boolean {
+        val user = _uiState.value.currentUser
+        if (user == null) {
+            _uiState.value = _uiState.value.copy(errorMessage = "વપરાશકર્તા લોગિન થયેલ નથી.")
+            return false
+        }
+        if (currentPass.isBlank() || newPass.isBlank() || confirmPass.isBlank()) {
+            _uiState.value = _uiState.value.copy(errorMessage = "કૃપા કરીને બધી વિગતો ભરો.")
+            return false
+        }
+        if (newPass != confirmPass) {
+            _uiState.value = _uiState.value.copy(errorMessage = "નવો પાસવર્ડ અને કન્ફર્મ પાસવર્ડ મેળ ખાતા નથી.")
+            return false
+        }
+        if (newPass.length < 4) {
+            _uiState.value = _uiState.value.copy(errorMessage = "પાસવર્ડ ઓછામાં ઓછો ૪ અક્ષરનો હોવો જોઈએ.")
+            return false
+        }
+        if (user.password != currentPass) {
+            _uiState.value = _uiState.value.copy(errorMessage = "હાલનો પાસવર્ડ ખોટો છે.")
+            return false
+        }
+
+        viewModelScope.launch {
+            val updated = user.copy(password = newPass)
+            repository.updateUser(updated)
+            _uiState.value = _uiState.value.copy(
+                currentUser = updated,
+                successMessage = "તમારો પાસવર્ડ સફળતાપૂર્વક બદલાઈ ગયો છે."
+            )
+        }
+        return true
+    }
+
+    fun toggleNotifications() {
+        _uiState.value = _uiState.value.copy(notificationsEnabled = !_uiState.value.notificationsEnabled)
+    }
+
+    fun toggleDarkTheme() {
+        _uiState.value = _uiState.value.copy(darkThemeEnabled = !_uiState.value.darkThemeEnabled)
+    }
+
+    fun toggleSound() {
+        _uiState.value = _uiState.value.copy(soundEnabled = !_uiState.value.soundEnabled)
     }
 }

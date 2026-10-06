@@ -1,6 +1,10 @@
 package com.example.ui.screens.admin
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -22,10 +26,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.data.ai.GeneratedMcq
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudyProTopBar
@@ -38,18 +44,23 @@ fun AdminAiGeneratorScreen(
     mainViewModel: MainViewModel,
     onBackClick: () -> Unit
 ) {
+    val context = LocalContext.current
     val isGenerating by mainViewModel.isAiGenerating.collectAsState()
     val statusMessage by mainViewModel.aiStatusMessage.collectAsState()
     val generatedQuestions by mainViewModel.aiGeneratedQuestions.collectAsState()
     val allTests by mainViewModel.allTests.collectAsState()
     val geminiApiKey by mainViewModel.geminiApiKey.collectAsState()
 
+    var examTitle by remember { mutableStateOf("ગુજરાત પોલીસ કોન્સ્ટેબલ (LRD)") }
+    var partName by remember { mutableStateOf("ભાગ-બ (Part B)") }
     var subject by remember { mutableStateOf("ભારતીય બંધારણ") }
-    var topic by remember { mutableStateOf("મૂળભૂત અધિકારો અને ફરજો") }
+    var topic by remember { mutableStateOf("મૂળભૂત અધિકારો") }
+    var subtopic by remember { mutableStateOf("") }
     var difficulty by remember { mutableStateOf("મધ્યમ") }
-    var requestedCountText by remember { mutableStateOf("5") }
+    var requestedCountText by remember { mutableStateOf("10") }
     var referenceText by remember { mutableStateOf("") }
     var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var cameraErrorMessage by remember { mutableStateOf<String?>(null) }
 
     var editingIndex by remember { mutableStateOf<Int?>(null) }
     var editingQuestion by remember { mutableStateOf<GeneratedMcq?>(null) }
@@ -58,23 +69,59 @@ fun AdminAiGeneratorScreen(
     var selectedTargetTestId by remember { mutableStateOf<Int?>(null) }
     var successToast by remember { mutableStateOf<String?>(null) }
 
-    // Camera launcher
+    // Safe Camera launcher
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicturePreview()
     ) { bitmap: Bitmap? ->
         if (bitmap != null) {
             capturedBitmap = bitmap
+            cameraErrorMessage = null
         }
     }
 
-    val subjects = listOf("ભારતીય બંધારણ", "ગુજરાતનો ઇતિહાસ", "ગુજરાતની ભૂગોળ", "રીઝનિંગ", "ગણિત", "સામાન્ય વિજ્ઞાન", "ગુજરાતી વ્યાકરણ", "કરંટ અફેર્સ")
+    // Runtime Camera Permission Launcher
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            try {
+                cameraLauncher.launch(null)
+            } catch (_: Exception) {
+                cameraErrorMessage = "કેમેરા ઉપલબ્ધ નથી અથવા ખોલવામાં સમસ્યા આવી."
+            }
+        } else {
+            cameraErrorMessage = "કેમેરાની પરવાનગી જરૂરી છે. કૃપા કરીને Settings માં Camera Permission ચાલુ કરો."
+        }
+    }
+
+    // Safe Gallery Picker fallback
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                if (bitmap != null) {
+                    capturedBitmap = bitmap
+                    cameraErrorMessage = null
+                }
+            } catch (_: Exception) {
+                cameraErrorMessage = "ઇમેજ લોડ કરવામાં સમસ્યા આવી."
+            }
+        }
+    }
+
+    val exams = listOf("ગુજરાત પોલીસ કોન્સ્ટેબલ (LRD)", "ફોરેસ્ટ બીટ ગાર્ડ (વનરક્ષક)", "MPHW")
+    val parts = listOf("ભાગ-અ (Part A)", "ભાગ-બ (Part B)")
+    val subjects = listOf("ભારતીય બંધારણ", "ગુજરાતની ભૂગોળ", "ગુજરાતનો ઇતિહાસ", "સામાન્ય વિજ્ઞાન", "રીઝનિંગ", "ગણિત")
     val difficulties = listOf("સરળ", "મધ્યમ", "કઠિન")
 
     Scaffold(
         topBar = {
             StudyProTopBar(
-                title = "AI પ્રશ્ન નિર્માતા (AI Question Generator)",
-                subtitle = "Gemini AI આધારિત ગુજરાતી MCQ નિર્માણ",
+                title = "AI પ્રશ્ન નિર્માતા (AI MCQ Generator)",
+                subtitle = "Exam → Part → Subject → Topic મુજબ સચોટ પ્રશ્નો",
                 showBackButton = true,
                 onBackClick = onBackClick
             )
@@ -97,44 +144,92 @@ fun AdminAiGeneratorScreen(
                 ) {
                     Column(modifier = Modifier.padding(18.dp)) {
                         Text(
-                            text = "પ્રશ્ન નિર્માણ પરિમાણો (Generation Parameters)",
+                            text = "પ્રશ્ન નિર્માણ પરિમાણો (Generation Hierarchy)",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                         )
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Subject Selector Dropdown / Row
-                        Text("વિષય પસંદ કરો (Subject):", style = MaterialTheme.typography.labelMedium)
+                        // 1. Exam Selector
+                        Text("૧. લક્ષ્ય પરીક્ષા (Exam):", style = MaterialTheme.typography.labelMedium)
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            listOf("બંધારણ", "ઇતિહાસ", "ભૂગોળ", "વિજ્ઞાન", "ગણિત").forEach { subItem ->
+                            exams.forEach { examItem ->
                                 FilterChip(
-                                    selected = subject.contains(subItem),
-                                    onClick = {
-                                        subject = when (subItem) {
-                                            "બંધારણ" -> "ભારતીય બંધારણ"
-                                            "ઇતિહાસ" -> "ગુજરાતનો ઇતિહાસ"
-                                            "ભૂગોળ" -> "ગુજરાતની ભૂગોળ"
-                                            "વિજ્ઞાન" -> "સામાન્ય વિજ્ઞાન"
-                                            else -> "ગણિત અને રીઝનિંગ"
-                                        }
-                                    },
-                                    label = { Text(subItem, fontSize = 11.sp) }
+                                    selected = examTitle == examItem,
+                                    onClick = { examTitle = examItem },
+                                    label = { Text(if (examItem.contains("કોન્સ્ટેબલ")) "કોન્સ્ટેબલ" else if (examItem.contains("ફોરેસ્ટ")) "ફોરેસ્ટ" else "MPHW", fontSize = 11.sp) }
                                 )
                             }
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
 
+                        // 2. Part Selector
+                        Text("૨. વિભાગ (Part):", style = MaterialTheme.typography.labelMedium)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            parts.forEach { p ->
+                                FilterChip(
+                                    selected = partName == p,
+                                    onClick = { partName = p },
+                                    label = { Text(p, fontSize = 11.sp) }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // 3. Subject Selector
+                        Text("૩. વિષય (Subject):", style = MaterialTheme.typography.labelMedium)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            subjects.take(4).forEach { subItem ->
+                                FilterChip(
+                                    selected = subject == subItem,
+                                    onClick = {
+                                        subject = subItem
+                                        topic = when (subItem) {
+                                            "ભારતીય બંધારણ" -> "મૂળભૂત અધિકારો"
+                                            "ગુજરાતની ભૂગોળ" -> "નદીઓ અને બંધો"
+                                            "ગુજરાતનો ઇતિહાસ" -> "સોલંકી વંશ અને વાવ"
+                                            "સામાન્ય વિજ્ઞાન" -> "વિટામિન અને માનવ શરીર"
+                                            else -> "શ્રેણી અને કોડિંગ"
+                                        }
+                                    },
+                                    label = { Text(subItem.take(6), fontSize = 11.sp) }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // 4. Strict Topic Input
                         OutlinedTextField(
                             value = topic,
                             onValueChange = { topic = it },
-                            label = { Text("ચોક્કસ ટોપિક (Topic Name)") },
+                            label = { Text("૪. ચોક્કસ ટોપિક (Strict Topic Name)*") },
+                            placeholder = { Text("દા.ત. મૂળભૂત અધિકારો અથવા નદીઓ") },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("ai_topic_input"),
+                            singleLine = true
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // 5. Optional Subtopic Input
+                        OutlinedTextField(
+                            value = subtopic,
+                            onValueChange = { subtopic = it },
+                            label = { Text("સબ-ટોપિક (ઓપ્શનલ Subtopic)") },
+                            placeholder = { Text("દા.ત. અનુચ્છેદ ૧૨ થી ૩૫ અથવા સરદાર સરોવર") },
+                            modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
 
@@ -169,25 +264,62 @@ fun AdminAiGeneratorScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        // Camera / Image to MCQ Section
-                        Text("ફોટો અથવા દસ્તાવેજમાંથી પ્રશ્નો (Photo to MCQ):", style = MaterialTheme.typography.labelMedium)
-                        Spacer(modifier = Modifier.height(6.dp))
+                        // 6. Source Material Section (Camera & Gallery)
+                        Text("સ્ત્રોત સામગ્રી (Source Material - Optional):", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            text = "* નોંધ: અપલોડ કરેલ સામગ્રીમાંથી ફક્ત ઉપર પસંદ કરેલ ટોપિક ($topic) ના જ પ્રશ્નો બનશે.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             OutlinedButton(
-                                onClick = { cameraLauncher.launch(null) },
+                                onClick = {
+                                    cameraErrorMessage = null
+                                    val hasPermission = ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.CAMERA
+                                    ) == PackageManager.PERMISSION_GRANTED
+
+                                    if (hasPermission) {
+                                        try {
+                                            cameraLauncher.launch(null)
+                                        } catch (_: Exception) {
+                                            cameraErrorMessage = "કેમેરા ઉપલબ્ધ નથી અથવા ખોલવામાં સમસ્યા આવી."
+                                        }
+                                    } else {
+                                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                    }
+                                },
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("ai_camera_capture_button")
                             ) {
                                 Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("કેમેરા ફોટો લો", fontSize = 12.sp)
+                                Text("કેમેરા ફોટો", fontSize = 12.sp)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    cameraErrorMessage = null
+                                    try {
+                                        galleryLauncher.launch("image/*")
+                                    } catch (_: Exception) {
+                                        cameraErrorMessage = "ગેલેરી ખોલવામાં સમસ્યા આવી."
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("ગેલેરીમાંથી લો", fontSize = 12.sp)
                             }
 
                             if (capturedBitmap != null) {
@@ -196,8 +328,36 @@ fun AdminAiGeneratorScreen(
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = CrimsonError)
                                 ) {
                                     Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("હટાવો", fontSize = 11.sp)
+                                }
+                            }
+                        }
+
+                        // Camera Error Alert Message
+                        cameraErrorMessage?.let { errMsg ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Surface(
+                                color = MaterialTheme.colorScheme.errorContainer,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = errMsg,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    IconButton(
+                                        onClick = { cameraErrorMessage = null },
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = "બંધ કરો", modifier = Modifier.size(14.dp))
+                                    }
                                 }
                             }
                         }
@@ -219,7 +379,10 @@ fun AdminAiGeneratorScreen(
                                         .clip(RoundedCornerShape(6.dp))
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
-                                Text("ફોટો જોડાયેલ છે! AI આ ફોટામાંથી પ્રશ્નો બનાવશે.", style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF065F46)))
+                                Text(
+                                    "ઇમેજ જોડાયેલ છે! AI આ સામગ્રીમાંથી માત્ર '$topic' ના જ પ્રશ્નો બનાવશે.",
+                                    style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF065F46))
+                                )
                             }
                         }
 
@@ -229,19 +392,51 @@ fun AdminAiGeneratorScreen(
                             value = referenceText,
                             onValueChange = { referenceText = it },
                             label = { Text("વધારાનું સંદર્ભ લખાણ (Optional Reference Text)") },
-                            placeholder = { Text("કોઈ પુસ્તકનો ફકરો અથવા મહત્વના મુદ્દા અહીં પેસ્ટ કરો...") },
+                            placeholder = { Text("પુસ્તકનો ફકરો અથવા અભ્યાસ નોંધ અહીં પેસ્ટ કરો...") },
                             modifier = Modifier.fillMaxWidth(),
-                            maxLines = 3
+                            maxLines = 2
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Configuration Summary Card before generation
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "જનરેશન પૂર્વાવલોકન (Configuration Summary):",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("• પરીક્ષા: $examTitle", fontSize = 11.sp)
+                                Text("• વિભાગ: $partName | વિષય: $subject", fontSize = 11.sp)
+                                Text(
+                                    text = "• મુખ્ય ટોપિક: $topic",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                if (subtopic.isNotBlank()) {
+                                    Text("• સબ-ટોપિક: $subtopic", fontSize = 11.sp)
+                                }
+                                Text("• પ્રશ્નોની સંખ્યા: ${requestedCountText.toIntOrNull() ?: 10}", fontSize = 11.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Button(
                             onClick = {
-                                val count = requestedCountText.toIntOrNull() ?: 5
+                                val count = requestedCountText.toIntOrNull() ?: 10
                                 mainViewModel.generateAiQuestions(
+                                    examTitle = examTitle,
+                                    partName = partName,
                                     subject = subject,
                                     topic = topic,
+                                    subtopic = subtopic,
                                     difficulty = difficulty,
                                     count = count,
                                     imageBitmap = capturedBitmap,
@@ -258,14 +453,15 @@ fun AdminAiGeneratorScreen(
                             if (isGenerating) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(24.dp),
-                                    color = MaterialTheme.colorScheme.onPrimary
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
-                                Text("AI પ્રશ્નો તૈયાર કરી રહ્યું છે...")
+                                Text("પ્રશ્નો જનરેટ થઈ રહ્યા છે...")
                             } else {
                                 Icon(Icons.Default.AutoAwesome, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("AI પ્રશ્નો બનાવો (Generate MCQs)", fontWeight = FontWeight.Bold)
+                                Text("ટોપિક આધારિત પ્રશ્નો જનરેટ કરો")
                             }
                         }
 
@@ -275,7 +471,7 @@ fun AdminAiGeneratorScreen(
                                 text = statusMessage ?: "",
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (statusMessage!!.contains("ભૂલ")) CrimsonError else EmeraldSuccess
+                                    color = if (statusMessage!!.contains("ભૂલ") || statusMessage!!.contains("સમસ્યા")) CrimsonError else EmeraldSuccess
                                 )
                             )
                         }

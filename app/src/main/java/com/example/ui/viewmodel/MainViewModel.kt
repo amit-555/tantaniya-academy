@@ -215,8 +215,11 @@ class MainViewModel(
 
     // --- AI GENERATION ACTIONS ---
     fun generateAiQuestions(
+        examTitle: String = "ગુજરાત પોલીસ કોન્સ્ટેબલ (LRD)",
+        partName: String = "ભાગ-બ (Part B)",
         subject: String,
         topic: String,
+        subtopic: String = "",
         difficulty: String,
         count: Int,
         imageBitmap: Bitmap? = null,
@@ -227,8 +230,11 @@ class MainViewModel(
             _aiStatusMessage.value = "AI પ્રશ્નો તૈયાર કરી રહ્યું છે..."
             val result = aiService.generateQuestions(
                 apiKey = _geminiApiKey.value,
+                examTitle = examTitle,
+                partName = partName,
                 subject = subject,
                 topic = topic,
+                subtopic = subtopic,
                 difficulty = difficulty,
                 count = count,
                 imageBitmap = imageBitmap,
@@ -236,10 +242,14 @@ class MainViewModel(
             )
             _isAiGenerating.value = false
             result.onSuccess { list ->
-                _aiGeneratedQuestions.value = list
-                _aiStatusMessage.value = "સફળતા! ${list.size} અનન્ય પ્રશ્નો સફળતાપૂર્વક તૈયાર થયા."
+                if (list.isEmpty()) {
+                    _aiStatusMessage.value = "આ Topic માટે પૂરતી માહિતી મળી નથી. કૃપા કરીને યોગ્ય Study Material અપલોડ કરો."
+                } else {
+                    _aiGeneratedQuestions.value = list
+                    _aiStatusMessage.value = "સફળતા! '${topic}' ટોપિકના ${list.size} ચોક્કસ પ્રશ્નો સફળતાપૂર્વક તૈયાર થયા."
+                }
             }.onFailure { err ->
-                _aiStatusMessage.value = "ભૂલ: ${err.message}"
+                _aiStatusMessage.value = "પ્રશ્નો બનાવવામાં સમસ્યા આવી. કૃપા કરીને ફરી પ્રયાસ કરો."
             }
         }
     }

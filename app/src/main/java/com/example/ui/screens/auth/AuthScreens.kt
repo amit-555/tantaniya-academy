@@ -1,6 +1,7 @@
 package com.example.ui.screens.auth
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -378,103 +379,370 @@ fun ProfileDialog(
 ) {
     val state by authViewModel.uiState.collectAsState()
     val user = state.currentUser ?: return
-    var adminCodeInput by remember { mutableStateOf("") }
-    var showAdminCodeDialog by remember { mutableStateOf(false) }
+    var selectedSection by remember { mutableStateOf<Int>(0) } // 0: Profile, 1: Settings
+
+    // Edit Profile State
+    var isEditingName by remember { mutableStateOf(false) }
+    var editedName by remember { mutableStateOf(user.name) }
+
+    // Change Password State
+    var showChangePasswordDialog by remember { mutableStateOf(false) }
+    var currentPasswordInput by remember { mutableStateOf("") }
+    var newPasswordInput by remember { mutableStateOf("") }
+    var confirmPasswordInput by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = user.name.take(1).uppercase(),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 20.sp
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(text = user.name, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                    Text(
-                        text = if (user.role == "ADMIN") "એડમિન રોલ (Administrator)" else "સામાન્ય વિદ્યાર્થી (Student)",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = if (user.role == "ADMIN") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
-                            fontWeight = FontWeight.SemiBold
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = user.name.take(1).uppercase(),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 20.sp
                         )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = user.name,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1
+                        )
+                        Text(
+                            text = if (user.role == "ADMIN") "એડમિન રોલ (Administrator)" else "સામાન્ય વિદ્યાર્થી (Student)",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = if (user.role == "ADMIN") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Profile vs Settings Switcher Tabs
+                TabRow(
+                    selectedTabIndex = selectedSection,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Tab(
+                        selected = selectedSection == 0,
+                        onClick = { selectedSection = 0 },
+                        text = { Text("👤 પ્રોફાઇલ", fontWeight = FontWeight.SemiBold, fontSize = 12.sp) }
+                    )
+                    Tab(
+                        selected = selectedSection == 1,
+                        onClick = { selectedSection = 1 },
+                        text = { Text("⚙️ સેટિંગ્સ", fontWeight = FontWeight.SemiBold, fontSize = 12.sp) }
                     )
                 }
             }
         },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Divider()
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(text = "ઈમેઈલ: ${user.email}", style = MaterialTheme.typography.bodyMedium)
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(text = "પરીક્ષા: ${user.targetExam}", style = MaterialTheme.typography.bodyMedium)
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Secure Role Information & Verification Card
-                val isPrimaryAdmin = com.example.data.repository.AuthConfig.isPrimaryAdmin(user.email)
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (user.role == "ADMIN") MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                        else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = if (user.role == "ADMIN") Icons.Default.VerifiedUser else Icons.Default.School,
-                                contentDescription = null,
-                                tint = if (user.role == "ADMIN") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = when {
-                                    isPrimaryAdmin && user.role == "ADMIN" -> "👑 મુખ્ય એડમિનિસ્ટ્રેટર (Primary Admin)"
-                                    user.role == "ADMIN" -> "🛡️ સિસ્ટમ એડમિનિસ્ટ્રેટર (Admin)"
-                                    else -> "🎓 વિદ્યાર્થી એકાઉન્ટ (Student)"
-                                },
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                // Messages banner
+                state.errorMessage?.let { msg ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    ) {
                         Text(
-                            text = when {
-                                isPrimaryAdmin && user.role == "ADMIN" ->
-                                    "તમારું એકાઉન્ટ સિસ્ટમના અધિકૃત First & Primary Admin તરીકે સુરક્ષિત રીતે કન્ફિગર થયેલું છે. તમે તમામ પરીક્ષાઓ, ટેસ્ટ, પ્રશ્નો અને CMS કન્ટેન્ટ મેનેજ કરી શકો છો."
-                                isPrimaryAdmin && user.role != "ADMIN" ->
-                                    "તમારું એકાઉન્ટ Primary Admin છે પરંતુ હાલમાં વિદ્યાર્થી પ્રિવ્યૂ મોડમાં છે."
-                                user.role == "ADMIN" ->
-                                    "તમારું એકાઉન્ટ એડમિન તરીકે ચકાસાયેલ છે. તમારી પાસે એડમિન CMS એક્સેસ છે."
-                                else ->
-                                    "આ એક સામાન્ય વિદ્યાર્થી એકાઉન્ટ છે. એડમિન CMS અને ડેશબોર્ડ ફક્ત અધિકૃત એડમિનિસ્ટ્રેટર માટે જ સુરક્ષિત છે."
-                            },
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 18.sp)
+                            text = msg,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(8.dp)
                         )
+                    }
+                }
+                state.successMessage?.let { msg ->
+                    Surface(
+                        color = Color(0xFFD1FAE5),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Text(
+                            text = msg,
+                            color = Color(0xFF065F46),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
 
-                        if (isPrimaryAdmin) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            OutlinedButton(
-                                onClick = { authViewModel.toggleAdminPreviewMode() },
-                                modifier = Modifier.fillMaxWidth()
+                if (selectedSection == 0) {
+                    // --- SECTION 0: PROFILE ---
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    if (user.role == "ADMIN") "વિદ્યાર્થી પ્રિવ્યૂ મોડ સ્વિચ કરો"
-                                    else "પાછા એડમિન મોડ પર સ્વિચ કરો",
-                                    fontSize = 12.sp
+                                    text = "નામ:",
+                                    style = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 )
+                                TextButton(
+                                    onClick = { isEditingName = !isEditingName },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isEditingName) Icons.Default.Close else Icons.Default.Edit,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(if (isEditingName) "રદ કરો" else "નામ બદલો", fontSize = 11.sp)
+                                }
+                            }
+
+                            if (isEditingName) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = editedName,
+                                        onValueChange = { editedName = it },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true,
+                                        textStyle = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Button(
+                                        onClick = {
+                                            authViewModel.updateProfileName(editedName)
+                                            isEditingName = false
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 10.dp)
+                                    ) {
+                                        Text("સાચવો", fontSize = 11.sp)
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = user.name,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "ઈમેઈલ:",
+                                style = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            )
+                            Text(text = user.email, style = MaterialTheme.typography.bodyMedium)
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "લક્ષ્ય પરીક્ષા:",
+                                style = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            )
+                            Text(text = user.targetExam, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Safe Role Information
+                    val isPrimaryAdmin = com.example.data.repository.AuthConfig.isPrimaryAdmin(user.email)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (user.role == "ADMIN") MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (user.role == "ADMIN") Icons.Default.VerifiedUser else Icons.Default.School,
+                                    contentDescription = null,
+                                    tint = if (user.role == "ADMIN") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = when {
+                                        isPrimaryAdmin && user.role == "ADMIN" -> "👑 મુખ્ય એડમિનિસ્ટ્રેટર (Primary Admin)"
+                                        user.role == "ADMIN" -> "🛡️ સિસ્ટમ એડમિનિસ્ટ્રેટર (Admin)"
+                                        else -> "🎓 વિદ્યાર્થી એકાઉન્ટ (Student)"
+                                    },
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (user.role == "ADMIN")
+                                    "તમારી પાસે તમામ પરીક્ષાઓ અને CMS મેનેજમેન્ટનો પૂર્ણ એક્સેસ છે."
+                                else
+                                    "આ એક સુરક્ષિત વિદ્યાર્થી એકાઉન્ટ છે. એડમિન પેનલ ફક્ત અધિકૃત સંચાલક માટે સુરક્ષિત છે.",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 16.sp)
+                            )
+                            if (isPrimaryAdmin) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedButton(
+                                    onClick = { authViewModel.toggleAdminPreviewMode() },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentPadding = PaddingValues(vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        if (user.role == "ADMIN") "વિદ્યાર્થી પ્રિવ્યૂ મોડ સ્વિચ કરો" else "પાછા એડમિન મોડ પર સ્વિચ કરો",
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // --- SECTION 1: SETTINGS ---
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Change Password Option
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showChangePasswordDialog = true },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(12.dp)
+                                    .fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text("🔐 પાસવર્ડ બદલો", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text("તમારો સુરક્ષિત પાસવર્ડ અપડેટ કરો", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                                Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        // Notification Preference
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("🔔 નોટિફિકેશન્સ", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                }
+                                Switch(
+                                    checked = state.notificationsEnabled,
+                                    onCheckedChange = { authViewModel.toggleNotifications() }
+                                )
+                            }
+                        }
+
+                        // Theme Preference
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.DarkMode, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("🌙 થીમ (ડાર્ક મોડ)", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                }
+                                Switch(
+                                    checked = state.darkThemeEnabled,
+                                    onCheckedChange = { authViewModel.toggleDarkTheme() }
+                                )
+                            }
+                        }
+
+                        // Sound Preference
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("🔊 સાઉન્ડ / ઓડિયો", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                }
+                                Switch(
+                                    checked = state.soundEnabled,
+                                    onCheckedChange = { authViewModel.toggleSound() }
+                                )
+                            }
+                        }
+
+                        // Language Info
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(12.dp)
+                                    .fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("🌐 એપ્લિકેશન ભાષા", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                }
+                                Text("ગુજરાતી (Default)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
@@ -488,7 +756,9 @@ fun ProfileDialog(
                     onDismiss()
                 }
             ) {
-                Text("લોગ આઉટ કરો", color = MaterialTheme.colorScheme.error)
+                Icon(Icons.Default.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("🚪 લોગ આઉટ કરો", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
@@ -497,4 +767,86 @@ fun ProfileDialog(
             }
         }
     )
+
+    // Secure Change Password Sub-Dialog
+    if (showChangePasswordDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showChangePasswordDialog = false
+                currentPasswordInput = ""
+                newPasswordInput = ""
+                confirmPasswordInput = ""
+            },
+            title = {
+                Text("🔐 પાસવર્ડ બદલો (Change Password)", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "તમારો નવો પાસવર્ડ ઓછામાં ઓછો ૪ અક્ષરનો હોવો જોઈએ.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = currentPasswordInput,
+                        onValueChange = { currentPasswordInput = it },
+                        label = { Text("હાલનો પાસવર્ડ (Current Password)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = newPasswordInput,
+                        onValueChange = { newPasswordInput = it },
+                        label = { Text("નવો પાસવર્ડ (New Password)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = confirmPasswordInput,
+                        onValueChange = { confirmPasswordInput = it },
+                        label = { Text("નવો પાસવર્ડ પુષ્ટિ કરો (Confirm)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val success = authViewModel.changePassword(
+                            currentPass = currentPasswordInput,
+                            newPass = newPasswordInput,
+                            confirmPass = confirmPasswordInput
+                        )
+                        if (success) {
+                            showChangePasswordDialog = false
+                            currentPasswordInput = ""
+                            newPasswordInput = ""
+                            confirmPasswordInput = ""
+                        }
+                    }
+                ) {
+                    Text("પાસવર્ડ સાચવો")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showChangePasswordDialog = false
+                        currentPasswordInput = ""
+                        newPasswordInput = ""
+                        confirmPasswordInput = ""
+                    }
+                ) {
+                    Text("રદ કરો")
+                }
+            }
+        )
+    }
 }
