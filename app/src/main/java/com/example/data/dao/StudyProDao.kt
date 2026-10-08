@@ -258,6 +258,19 @@ interface StudyProDao {
     @Query("SELECT * FROM study_materials WHERE (:subject = '' OR subject = :subject) AND (isPublished = 1 OR :includeUnpublished = 1) ORDER BY id DESC")
     fun getStudyMaterialsBySubject(subject: String, includeUnpublished: Boolean = false): Flow<List<StudyMaterialEntity>>
 
+    // --- IMAGE LIBRARY ---
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertImageLibraryItem(item: ImageLibraryEntity): Long
+
+    @Query("DELETE FROM image_library WHERE id = :id")
+    suspend fun deleteImageLibraryItemById(id: Int)
+
+    @Query("SELECT * FROM image_library ORDER BY id DESC")
+    fun getAllImageLibraryItems(): Flow<List<ImageLibraryEntity>>
+
+    @Query("SELECT * FROM image_library WHERE isPublished = 1 ORDER BY id DESC")
+    fun getPublishedImageLibraryItems(): Flow<List<ImageLibraryEntity>>
+
     // --- SETTINGS ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun setSetting(setting: AppSettingEntity)

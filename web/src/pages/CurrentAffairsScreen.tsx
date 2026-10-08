@@ -41,6 +41,14 @@ export const CurrentAffairsScreen: React.FC<CurrentAffairsScreenProps> = ({ item
               {item.headline}
             </h3>
 
+            {item.imageUrl && (
+              <img
+                src={item.imageUrl}
+                alt={item.headline}
+                className="w-full max-h-72 object-cover rounded-xl mb-3 border border-slate-100"
+              />
+            )}
+
             <p className="text-xs sm:text-sm text-slate-700 leading-relaxed mb-3">
               {item.description}
             </p>

@@ -92,6 +92,7 @@ export interface CurrentAffairsItem {
   headline: string;
   description: string;
   category: string;
+  imageUrl?: string;
   importantFacts: string;
   source: string;
   relatedExam: string;
@@ -130,6 +131,18 @@ export interface StudyMaterialItem {
   description: string;
   type: 'નોટ્સ' | 'PDF' | 'શોર્ટ ટ્રીક્સ';
   contentText: string;
+  fileUrl?: string;
+  fileSize?: string;
+  isPublished: boolean;
+  createdAt: number;
+}
+
+export interface ImageLibraryItem {
+  id: number;
+  title: string;
+  category: string;
+  description?: string;
+  imageUrl: string;
   isPublished: boolean;
   createdAt: number;
 }

@@ -61,6 +61,20 @@ export const StudyMaterialScreen: React.FC<StudyMaterialScreenProps> = ({ materi
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 whitespace-pre-line leading-relaxed font-mono">
                 {m.contentText}
               </div>
+
+              {m.fileUrl && (
+                <div className="mt-3">
+                  <a
+                    href={m.fileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-sm"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>PDF / સામગ્રી ખોલો ({m.fileSize || 'PDF'})</span>
+                  </a>
+                </div>
+              )}
             </div>
           ))}
         </div>

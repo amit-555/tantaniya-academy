@@ -137,6 +137,19 @@ fun CurrentAffairsCard(item: CurrentAffairsEntity) {
                 style = MaterialTheme.typography.bodyMedium.copy(color = TextSecondary, lineHeight = 20.sp)
             )
 
+            if (item.imageUrl.isNotBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                coil.compose.AsyncImage(
+                    model = item.imageUrl,
+                    contentDescription = item.headline,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+            }
+
             if (item.mcqQuestion.isNotBlank()) {
                 Spacer(modifier = Modifier.height(10.dp))
                 OutlinedButton(
@@ -518,6 +531,23 @@ fun StudyMaterialScreen(
                                     modifier = Modifier.padding(12.dp),
                                     style = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary, lineHeight = 20.sp)
                                 )
+                            }
+                            if (mat.fileUrl.isNotBlank()) {
+                                val context = androidx.compose.ui.platform.LocalContext.current
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(mat.fileUrl))
+                                            context.startActivity(intent)
+                                        } catch (_: Exception) {}
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("PDF / અભ્યાસ સામગ્રી ખોલો (${mat.fileSize.ifBlank { "PDF" }})")
+                                }
                             }
                         }
                     }

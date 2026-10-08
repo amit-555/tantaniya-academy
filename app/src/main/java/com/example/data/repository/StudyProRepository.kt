@@ -1,7 +1,9 @@
 package com.example.data.repository
 
+import android.net.Uri
 import com.example.data.dao.StudyProDao
 import com.example.data.entity.*
+import com.example.data.firestore.FirestoreSyncManager
 import kotlinx.coroutines.flow.Flow
 
 object AuthConfig {
@@ -19,7 +21,10 @@ object AuthConfig {
     }
 }
 
-class StudyProRepository(private val dao: StudyProDao) {
+class StudyProRepository(
+    private val dao: StudyProDao,
+    val syncManager: FirestoreSyncManager? = null
+) {
 
     /**
      * Guarantees that the Primary Admin account exists and is assigned role = "ADMIN".
@@ -53,8 +58,6 @@ class StudyProRepository(private val dao: StudyProDao) {
             if (existing != null) {
                 Result.failure(Exception("આ ઈમેઈલ પર એકાઉન્ટ પહેલેથી જ નોંધાયેલું છે!"))
             } else {
-                // Secure Authorization: Normal users can NEVER self-assign ADMIN role.
-                // Only the designated Primary Admin email receives role = "ADMIN".
                 val assignedRole = if (normalizedEmail == AuthConfig.PRIMARY_ADMIN_EMAIL.lowercase()) "ADMIN" else "USER"
                 val newUser = UserEntity(
                     name = name.trim(),
@@ -76,7 +79,6 @@ class StudyProRepository(private val dao: StudyProDao) {
             val normalizedEmail = email.trim().lowercase()
             val user = dao.getUserByEmail(normalizedEmail)
             if (user == null) {
-                // If primary admin logs in for the first time before prepopulation
                 if (normalizedEmail == AuthConfig.PRIMARY_ADMIN_EMAIL.lowercase()) {
                     val newAdmin = UserEntity(
                         name = "Amit Gangal (Primary Admin)",
@@ -95,7 +97,6 @@ class StudyProRepository(private val dao: StudyProDao) {
             } else if (!user.isActive) {
                 Result.failure(Exception("આ એકાઉન્ટ નિષ્ક્રિય કરેલ છે. એડમિનનો સંપર્ક કરો."))
             } else {
-                // Ensure Primary Admin always maintains ADMIN role
                 if (normalizedEmail == AuthConfig.PRIMARY_ADMIN_EMAIL.lowercase() && user.role != "ADMIN") {
                     val elevated = user.copy(role = "ADMIN")
                     dao.updateUser(elevated)
@@ -118,9 +119,23 @@ class StudyProRepository(private val dao: StudyProDao) {
     fun getAllExams(): Flow<List<ExamEntity>> = dao.getAllExams()
     fun getPublishedExams(): Flow<List<ExamEntity>> = dao.getPublishedExams()
     suspend fun getExamById(id: Int) = dao.getExamById(id)
-    suspend fun insertExam(exam: ExamEntity) = dao.insertExam(exam)
-    suspend fun updateExam(exam: ExamEntity) = dao.updateExam(exam)
-    suspend fun deleteExam(exam: ExamEntity) = dao.deleteExam(exam)
+
+    suspend fun insertExam(exam: ExamEntity): Long {
+        val id = dao.insertExam(exam)
+        syncManager?.pushExam(exam.copy(id = if (exam.id == 0) id.toInt() else exam.id))
+        return id
+    }
+
+    suspend fun updateExam(exam: ExamEntity) {
+        dao.updateExam(exam)
+        syncManager?.pushExam(exam)
+    }
+
+    suspend fun deleteExam(exam: ExamEntity) {
+        dao.deleteExam(exam)
+        syncManager?.removeExam(exam.id)
+    }
+
     fun countExams(): Flow<Int> = dao.countExams()
 
     // Syllabus
@@ -137,9 +152,23 @@ class StudyProRepository(private val dao: StudyProDao) {
     fun getTestsByExam(examId: Int): Flow<List<TestEntity>> = dao.getTestsByExam(examId)
     fun getPublishedTestsByExam(examId: Int): Flow<List<TestEntity>> = dao.getPublishedTestsByExam(examId)
     suspend fun getTestById(id: Int) = dao.getTestById(id)
-    suspend fun insertTest(test: TestEntity) = dao.insertTest(test)
-    suspend fun updateTest(test: TestEntity) = dao.updateTest(test)
-    suspend fun deleteTest(id: Int) = dao.deleteTestById(id)
+
+    suspend fun insertTest(test: TestEntity): Long {
+        val id = dao.insertTest(test)
+        syncManager?.pushTest(test.copy(id = if (test.id == 0) id.toInt() else test.id))
+        return id
+    }
+
+    suspend fun updateTest(test: TestEntity) {
+        dao.updateTest(test)
+        syncManager?.pushTest(test)
+    }
+
+    suspend fun deleteTest(id: Int) {
+        dao.deleteTestById(id)
+        syncManager?.removeTest(id)
+    }
+
     fun countTests(): Flow<Int> = dao.countTests()
 
     // Questions
@@ -148,10 +177,33 @@ class StudyProRepository(private val dao: StudyProDao) {
     fun filterQuestions(examId: Int = 0, q: String = "", sub: String = "", diff: String = ""): Flow<List<QuestionEntity>> =
         dao.filterQuestions(examId, q, sub, diff)
     suspend fun getQuestionById(id: Int) = dao.getQuestionById(id)
-    suspend fun insertQuestion(q: QuestionEntity) = dao.insertQuestion(q)
-    suspend fun insertQuestions(list: List<QuestionEntity>) = dao.insertQuestions(list)
-    suspend fun updateQuestion(q: QuestionEntity) = dao.updateQuestion(q)
-    suspend fun deleteQuestion(id: Int) = dao.deleteQuestionById(id)
+
+    suspend fun insertQuestion(q: QuestionEntity): Long {
+        val id = dao.insertQuestion(q)
+        syncManager?.pushQuestion(q.copy(id = if (q.id == 0) id.toInt() else q.id))
+        return id
+    }
+
+    suspend fun insertQuestions(list: List<QuestionEntity>): List<Long> {
+        val ids = dao.insertQuestions(list)
+        for (i in list.indices) {
+            val q = list[i]
+            val generatedId = if (q.id == 0) ids[i].toInt() else q.id
+            syncManager?.pushQuestion(q.copy(id = generatedId))
+        }
+        return ids
+    }
+
+    suspend fun updateQuestion(q: QuestionEntity) {
+        dao.updateQuestion(q)
+        syncManager?.pushQuestion(q)
+    }
+
+    suspend fun deleteQuestion(id: Int) {
+        dao.deleteQuestionById(id)
+        syncManager?.removeQuestion(id)
+    }
+
     fun countQuestions(): Flow<Int> = dao.countQuestions()
 
     // Test-Question Mapping
@@ -166,7 +218,12 @@ class StudyProRepository(private val dao: StudyProDao) {
     suspend fun countQuestionsInTestSync(testId: Int) = dao.countQuestionsInTestSync(testId)
 
     // Attempts & Results
-    suspend fun saveAttempt(attempt: TestAttemptEntity) = dao.insertAttempt(attempt)
+    suspend fun saveAttempt(attempt: TestAttemptEntity): Long {
+        val id = dao.insertAttempt(attempt)
+        syncManager?.pushTestAttempt(attempt.copy(id = if (attempt.id == 0) id.toInt() else attempt.id))
+        return id
+    }
+
     fun getAttemptsByUser(userId: Int): Flow<List<TestAttemptEntity>> = dao.getAttemptsByUser(userId)
     fun getAllAttempts(): Flow<List<TestAttemptEntity>> = dao.getAllAttempts()
     fun getAttemptsByTest(testId: Int): Flow<List<TestAttemptEntity>> = dao.getAttemptsByTest(testId)
@@ -179,27 +236,86 @@ class StudyProRepository(private val dao: StudyProDao) {
     fun getPublishedCurrentAffairs(): Flow<List<CurrentAffairsEntity>> = dao.getPublishedCurrentAffairs()
     fun getCurrentAffairsByCategory(category: String, includeUnpublished: Boolean = false): Flow<List<CurrentAffairsEntity>> =
         dao.getCurrentAffairsByCategory(category, includeUnpublished)
-    suspend fun insertCurrentAffairs(item: CurrentAffairsEntity) = dao.insertCurrentAffairs(item)
-    suspend fun updateCurrentAffairs(item: CurrentAffairsEntity) = dao.updateCurrentAffairs(item)
-    suspend fun deleteCurrentAffairs(id: Int) = dao.deleteCurrentAffairsById(id)
+
+    suspend fun insertCurrentAffairs(item: CurrentAffairsEntity): Long {
+        val id = dao.insertCurrentAffairs(item)
+        syncManager?.pushCurrentAffairs(item.copy(id = if (item.id == 0) id.toInt() else item.id))
+        return id
+    }
+
+    suspend fun updateCurrentAffairs(item: CurrentAffairsEntity) {
+        dao.updateCurrentAffairs(item)
+        syncManager?.pushCurrentAffairs(item)
+    }
+
+    suspend fun deleteCurrentAffairs(id: Int) {
+        dao.deleteCurrentAffairsById(id)
+        syncManager?.removeCurrentAffairs(id)
+    }
 
     // GK Items
     fun getAllGkItems(): Flow<List<GkItemEntity>> = dao.getAllGkItems()
     fun getPublishedGkItems(): Flow<List<GkItemEntity>> = dao.getPublishedGkItems()
     fun getGkItemsByCategory(cat: String, includeUnpublished: Boolean = false): Flow<List<GkItemEntity>> =
         dao.getGkItemsByCategory(cat, includeUnpublished)
-    suspend fun insertGkItem(item: GkItemEntity) = dao.insertGkItem(item)
-    suspend fun updateGkItem(item: GkItemEntity) = dao.updateGkItem(item)
-    suspend fun deleteGkItem(id: Int) = dao.deleteGkItemById(id)
+
+    suspend fun insertGkItem(item: GkItemEntity): Long {
+        val id = dao.insertGkItem(item)
+        syncManager?.pushGkItem(item.copy(id = if (item.id == 0) id.toInt() else item.id))
+        return id
+    }
+
+    suspend fun updateGkItem(item: GkItemEntity) {
+        dao.updateGkItem(item)
+        syncManager?.pushGkItem(item)
+    }
+
+    suspend fun deleteGkItem(id: Int) {
+        dao.deleteGkItemById(id)
+        syncManager?.removeGkItem(id)
+    }
 
     // Study Materials
     fun getAllStudyMaterials(): Flow<List<StudyMaterialEntity>> = dao.getAllStudyMaterials()
     fun getPublishedStudyMaterials(): Flow<List<StudyMaterialEntity>> = dao.getPublishedStudyMaterials()
     fun getStudyMaterialsBySubject(sub: String, includeUnpublished: Boolean = false): Flow<List<StudyMaterialEntity>> =
         dao.getStudyMaterialsBySubject(sub, includeUnpublished)
-    suspend fun insertStudyMaterial(item: StudyMaterialEntity) = dao.insertStudyMaterial(item)
-    suspend fun updateStudyMaterial(item: StudyMaterialEntity) = dao.updateStudyMaterial(item)
-    suspend fun deleteStudyMaterial(id: Int) = dao.deleteStudyMaterialById(id)
+
+    suspend fun insertStudyMaterial(item: StudyMaterialEntity): Long {
+        val id = dao.insertStudyMaterial(item)
+        syncManager?.pushStudyMaterial(item.copy(id = if (item.id == 0) id.toInt() else item.id))
+        return id
+    }
+
+    suspend fun updateStudyMaterial(item: StudyMaterialEntity) {
+        dao.updateStudyMaterial(item)
+        syncManager?.pushStudyMaterial(item)
+    }
+
+    suspend fun deleteStudyMaterial(id: Int) {
+        dao.deleteStudyMaterialById(id)
+        syncManager?.removeStudyMaterial(id)
+    }
+
+    // Image Library
+    fun getAllImageLibraryItems(): Flow<List<ImageLibraryEntity>> = dao.getAllImageLibraryItems()
+    fun getPublishedImageLibraryItems(): Flow<List<ImageLibraryEntity>> = dao.getPublishedImageLibraryItems()
+
+    suspend fun insertImageLibraryItem(item: ImageLibraryEntity): Long {
+        val id = dao.insertImageLibraryItem(item)
+        syncManager?.pushImageLibraryItem(item.copy(id = if (item.id == 0) id.toInt() else item.id))
+        return id
+    }
+
+    suspend fun deleteImageLibraryItem(id: Int) {
+        dao.deleteImageLibraryItemById(id)
+        syncManager?.removeImageLibraryItem(id)
+    }
+
+    // Media Upload
+    suspend fun uploadMedia(uri: Uri, folder: String, isPdf: Boolean = false): String {
+        return syncManager?.uploadMedia(uri, folder, isPdf) ?: ""
+    }
 
     // Settings
     suspend fun setSetting(key: String, value: String) = dao.setSetting(AppSettingEntity(key, value))

@@ -23,9 +23,10 @@ import kotlinx.coroutines.launch
         CurrentAffairsEntity::class,
         GkItemEntity::class,
         StudyMaterialEntity::class,
+        ImageLibraryEntity::class,
         AppSettingEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

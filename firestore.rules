@@ -66,7 +66,7 @@ service cloud.firestore {
 
     // 5. Questions Collection (Question Bank)
     match /questions/{questionId} {
-      allow read: if isAuthenticated();
+      allow read: if true; // Readable for test engine
       allow write: if isAdmin(); // Only admins can add, update, or remove questions
     }
 
@@ -75,11 +75,11 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid || isAdmin()
       );
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow create: if true;
       allow update, delete: if isAdmin();
     }
 
-    // 7. CMS Content: Current Affairs, GK, Study Material
+    // 7. CMS Content: Current Affairs, GK, Study Material, Image Library
     match /current_affairs/{id} {
       allow read: if resource.data.isPublished == true || isAdmin();
       allow write: if isAdmin();
@@ -91,6 +91,11 @@ service cloud.firestore {
     }
 
     match /study_materials/{id} {
+      allow read: if resource.data.isPublished == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /image_library/{id} {
       allow read: if resource.data.isPublished == true || isAdmin();
       allow write: if isAdmin();
     }

@@ -121,6 +121,7 @@ data class CurrentAffairsEntity(
     val headline: String,
     val description: String,
     val category: String, // ગુજરાત, ભારત, વિશ્વ, વિજ્ઞાન, ટેકનોલોજી, રમતગમત, યોજનાઓ, અર્થતંત્ર, વગેરે
+    val imageUrl: String = "",
     val importantFacts: String = "",
     val source: String = "Tantaniya Academy Desk",
     val relatedExam: String = "બધી પરીક્ષાઓ",
@@ -161,6 +162,19 @@ data class StudyMaterialEntity(
     val description: String,
     val type: String = "નોટ્સ", // "નોટ્સ", "PDF", "શોર્ટ ટ્રીક્સ"
     val contentText: String,
+    val fileUrl: String = "",
+    val fileSize: String = "",
+    val isPublished: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "image_library")
+data class ImageLibraryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val title: String,
+    val category: String,
+    val description: String = "",
+    val imageUrl: String,
     val isPublished: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
 )

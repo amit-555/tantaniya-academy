@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
 import { BottomNav, NavTab } from './components/BottomNav';
@@ -18,18 +18,55 @@ import {
   INITIAL_GK,
   INITIAL_STUDY_MATERIAL
 } from './data/mockInitialData';
-import { Exam, Test, Question, TestAttempt, CurrentAffairsItem, GkItem, StudyMaterialItem } from './types';
+import {
+  Exam,
+  Test,
+  Question,
+  TestAttempt,
+  CurrentAffairsItem,
+  GkItem,
+  StudyMaterialItem,
+  ImageLibraryItem
+} from './types';
+import {
+  subscribeExams,
+  subscribeTests,
+  subscribeQuestions,
+  subscribeCurrentAffairs,
+  subscribeGk,
+  subscribeStudyMaterials,
+  subscribeImageLibrary,
+  subscribeTestAttempts,
+  saveExamToCloud,
+  deleteExamFromCloud,
+  saveTestToCloud,
+  deleteTestFromCloud,
+  saveQuestionToCloud,
+  deleteQuestionFromCloud,
+  saveCurrentAffairsToCloud,
+  deleteCurrentAffairsFromCloud,
+  saveGkToCloud,
+  deleteGkFromCloud,
+  saveStudyMaterialToCloud,
+  deleteStudyMaterialFromCloud,
+  saveImageLibraryItemToCloud,
+  deleteImageLibraryItemFromCloud,
+  saveTestAttemptToCloud,
+  seedInitialDataIfEmpty
+} from './services/firestoreService';
 
 function MainApp() {
-  const { isAdmin } = useAuth();
+  const { user } = useAuth();
 
-  // App Data State
+  // App Data State (Backed by Cloud Firestore)
   const [exams, setExams] = useState<Exam[]>(INITIAL_EXAMS);
   const [tests, setTests] = useState<Test[]>(INITIAL_TESTS);
   const [questions, setQuestions] = useState<Question[]>(INITIAL_QUESTIONS);
   const [currentAffairs, setCurrentAffairs] = useState<CurrentAffairsItem[]>(INITIAL_CURRENT_AFFAIRS);
   const [gkItems, setGkItems] = useState<GkItem[]>(INITIAL_GK);
   const [studyMaterials, setStudyMaterials] = useState<StudyMaterialItem[]>(INITIAL_STUDY_MATERIAL);
+  const [imageLibrary, setImageLibrary] = useState<ImageLibraryItem[]>([]);
+  const [testAttempts, setTestAttempts] = useState<TestAttempt[]>([]);
 
   // Navigation & View State
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
@@ -40,6 +77,54 @@ function MainApp() {
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
   const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
 
+  // Subscribe to shared Firestore collections on mount
+  useEffect(() => {
+    seedInitialDataIfEmpty();
+
+    const unsubExams = subscribeExams(cloudExams => {
+      if (cloudExams.length > 0) setExams(cloudExams);
+    });
+
+    const unsubTests = subscribeTests(cloudTests => {
+      if (cloudTests.length > 0) setTests(cloudTests);
+    });
+
+    const unsubQuestions = subscribeQuestions(cloudQuestions => {
+      if (cloudQuestions.length > 0) setQuestions(cloudQuestions);
+    });
+
+    const unsubCA = subscribeCurrentAffairs(cloudCA => {
+      if (cloudCA.length > 0) setCurrentAffairs(cloudCA);
+    });
+
+    const unsubGk = subscribeGk(cloudGk => {
+      if (cloudGk.length > 0) setGkItems(cloudGk);
+    });
+
+    const unsubSM = subscribeStudyMaterials(cloudSM => {
+      if (cloudSM.length > 0) setStudyMaterials(cloudSM);
+    });
+
+    const unsubImg = subscribeImageLibrary(cloudImgs => {
+      setImageLibrary(cloudImgs);
+    });
+
+    const unsubAttempts = subscribeTestAttempts(cloudAttempts => {
+      setTestAttempts(cloudAttempts);
+    });
+
+    return () => {
+      unsubExams();
+      unsubTests();
+      unsubQuestions();
+      unsubCA();
+      unsubGk();
+      unsubSM();
+      unsubImg();
+      unsubAttempts();
+    };
+  }, []);
+
   // Test Handlers
   const handleStartTest = (test: Test) => {
     setActiveTest(test);
@@ -49,6 +134,7 @@ function MainApp() {
   const handleFinishTest = (attempt: TestAttempt) => {
     setLastAttempt(attempt);
     setActiveTest(null);
+    saveTestAttemptToCloud(attempt);
   };
 
   const handleRetakeTest = () => {
@@ -59,21 +145,75 @@ function MainApp() {
     }
   };
 
-  // CMS Handlers
+  // Cloud CMS Handlers (Updates Firestore directly)
   const handleAddExam = (newExam: Exam) => {
     setExams(prev => [newExam, ...prev]);
+    saveExamToCloud(newExam);
+  };
+
+  const handleDeleteExam = (examId: number) => {
+    setExams(prev => prev.filter(e => e.id !== examId));
+    deleteExamFromCloud(examId);
   };
 
   const handleAddTest = (newTest: Test) => {
     setTests(prev => [newTest, ...prev]);
+    saveTestToCloud(newTest);
+  };
+
+  const handleDeleteTest = (testId: number) => {
+    setTests(prev => prev.filter(t => t.id !== testId));
+    deleteTestFromCloud(testId);
   };
 
   const handleAddQuestion = (newQ: Question) => {
     setQuestions(prev => [newQ, ...prev]);
+    saveQuestionToCloud(newQ);
   };
 
   const handleDeleteQuestion = (qId: number) => {
     setQuestions(prev => prev.filter(q => q.id !== qId));
+    deleteQuestionFromCloud(qId);
+  };
+
+  const handleAddCurrentAffairs = (ca: CurrentAffairsItem) => {
+    setCurrentAffairs(prev => [ca, ...prev]);
+    saveCurrentAffairsToCloud(ca);
+  };
+
+  const handleDeleteCurrentAffairs = (id: number) => {
+    setCurrentAffairs(prev => prev.filter(item => item.id !== id));
+    deleteCurrentAffairsFromCloud(id);
+  };
+
+  const handleAddGk = (gk: GkItem) => {
+    setGkItems(prev => [gk, ...prev]);
+    saveGkToCloud(gk);
+  };
+
+  const handleDeleteGk = (id: number) => {
+    setGkItems(prev => prev.filter(item => item.id !== id));
+    deleteGkFromCloud(id);
+  };
+
+  const handleAddStudyMaterial = (sm: StudyMaterialItem) => {
+    setStudyMaterials(prev => [sm, ...prev]);
+    saveStudyMaterialToCloud(sm);
+  };
+
+  const handleDeleteStudyMaterial = (id: number) => {
+    setStudyMaterials(prev => prev.filter(item => item.id !== id));
+    deleteStudyMaterialFromCloud(id);
+  };
+
+  const handleAddImageLibraryItem = (item: ImageLibraryItem) => {
+    setImageLibrary(prev => [item, ...prev]);
+    saveImageLibraryItemToCloud(item);
+  };
+
+  const handleDeleteImageLibraryItem = (id: number) => {
+    setImageLibrary(prev => prev.filter(item => item.id !== id));
+    deleteImageLibraryItemFromCloud(id);
   };
 
   // 1. If currently inside active CBRT Test
@@ -112,10 +252,22 @@ function MainApp() {
         currentAffairs={currentAffairs}
         gkItems={gkItems}
         studyMaterials={studyMaterials}
+        imageLibrary={imageLibrary}
+        testAttempts={testAttempts}
         onAddExam={handleAddExam}
+        onDeleteExam={handleDeleteExam}
         onAddTest={handleAddTest}
+        onDeleteTest={handleDeleteTest}
         onAddQuestion={handleAddQuestion}
         onDeleteQuestion={handleDeleteQuestion}
+        onAddCurrentAffairs={handleAddCurrentAffairs}
+        onDeleteCurrentAffairs={handleDeleteCurrentAffairs}
+        onAddGk={handleAddGk}
+        onDeleteGk={handleDeleteGk}
+        onAddStudyMaterial={handleAddStudyMaterial}
+        onDeleteStudyMaterial={handleDeleteStudyMaterial}
+        onAddImageLibraryItem={handleAddImageLibraryItem}
+        onDeleteImageLibraryItem={handleDeleteImageLibraryItem}
         onClose={() => {
           setShowAdminModal(false);
           if (currentTab === 'admin') setCurrentTab('home');

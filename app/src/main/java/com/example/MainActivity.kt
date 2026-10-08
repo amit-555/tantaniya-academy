@@ -72,7 +72,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val database = AppDatabase.getDatabase(applicationContext, lifecycleScope)
-        val repository = StudyProRepository(database.studyProDao())
+        val syncManager = com.example.data.firestore.FirestoreSyncManager(database.studyProDao(), applicationContext)
+        syncManager.startRealtimeSync(lifecycleScope)
+        val repository = StudyProRepository(database.studyProDao(), syncManager)
 
         val authViewModel = AuthViewModel(repository)
         val mainViewModel = MainViewModel(repository)

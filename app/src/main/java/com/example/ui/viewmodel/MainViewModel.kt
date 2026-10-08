@@ -288,8 +288,8 @@ class MainViewModel(
             val ids = repository.insertQuestions(entities)
 
             if (targetTestId != null) {
-                ids.forEachIndexed { idx, qId ->
-                    repository.addQuestionToTest(targetTestId, qId.toInt(), idx)
+                for (idx in ids.indices) {
+                    repository.addQuestionToTest(targetTestId, ids[idx].toInt(), idx)
                 }
             }
             _aiGeneratedQuestions.value = emptyList()
@@ -474,6 +474,26 @@ class MainViewModel(
 
     fun deleteSyllabus(id: Int) {
         viewModelScope.launch { repository.deleteSyllabus(id) }
+    }
+
+    // --- IMAGE LIBRARY CMS CRUD ---
+    val allImageLibraryItems: StateFlow<List<ImageLibraryEntity>> = repository.getAllImageLibraryItems()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun addImageLibraryItem(item: ImageLibraryEntity) {
+        viewModelScope.launch { repository.insertImageLibraryItem(item) }
+    }
+
+    fun deleteImageLibraryItem(id: Int) {
+        viewModelScope.launch { repository.deleteImageLibraryItem(id) }
+    }
+
+    // --- MEDIA UPLOAD ---
+    fun uploadMediaFile(uri: android.net.Uri, folder: String, isPdf: Boolean = false, onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val url = repository.uploadMedia(uri, folder, isPdf)
+            onResult(url)
+        }
     }
 
     // --- USER MANAGEMENT ---

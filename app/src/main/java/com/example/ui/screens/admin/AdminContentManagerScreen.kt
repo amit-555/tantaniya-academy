@@ -134,6 +134,22 @@ fun AdminCurrentAffairsTab(mainViewModel: MainViewModel) {
         var mcqC by remember { mutableStateOf("") }
         var mcqD by remember { mutableStateOf("") }
         var mcqCor by remember { mutableStateOf("A") }
+        var selectedImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
+        var uploadedImageUrl by remember { mutableStateOf("") }
+        var isUploading by remember { mutableStateOf(false) }
+
+        val imagePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+            contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+        ) { uri: android.net.Uri? ->
+            if (uri != null) {
+                selectedImageUri = uri
+                isUploading = true
+                mainViewModel.uploadMediaFile(uri, "current_affairs", isPdf = false) { url ->
+                    uploadedImageUrl = url
+                    isUploading = false
+                }
+            }
+        }
 
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
@@ -150,6 +166,31 @@ fun AdminCurrentAffairsTab(mainViewModel: MainViewModel) {
                             OutlinedTextField(value = cat, onValueChange = { cat = it }, label = { Text("કેટેગરી") }, modifier = Modifier.weight(1f))
                         }
                         Spacer(modifier = Modifier.height(8.dp))
+
+                        // Cloud Image Upload
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            OutlinedButton(
+                                onClick = { imagePickerLauncher.launch("image/*") },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (selectedImageUri != null) "ફોટો પસંદ કરેલ છે (બદલો)" else "ફોટો / ઇમેજ અપલોડ કરો", fontSize = 12.sp)
+                            }
+                            if (isUploading) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            }
+                        }
+                        if (uploadedImageUrl.isNotBlank()) {
+                            Text("✓ ક્લાઉડ સ્ટોરેજ પર અપલોડ થયેલ છે", fontSize = 11.sp, color = Color(0xFF10B981))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         Text("સ્વ-મૂલ્યાંકન MCQ પ્રશ્ન (વૈકલ્પિક):", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                         OutlinedTextField(value = mcqQ, onValueChange = { mcqQ = it }, label = { Text("પ્રશ્ન") }, modifier = Modifier.fillMaxWidth())
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -174,6 +215,7 @@ fun AdminCurrentAffairsTab(mainViewModel: MainViewModel) {
                                     description = desc,
                                     dateText = date,
                                     category = cat,
+                                    imageUrl = uploadedImageUrl,
                                     mcqQuestion = mcqQ,
                                     mcqOptionA = mcqA,
                                     mcqOptionB = mcqB,
@@ -346,6 +388,22 @@ fun AdminMaterialsTab(mainViewModel: MainViewModel) {
         var desc by remember { mutableStateOf("") }
         var type by remember { mutableStateOf("નોટ્સ") }
         var content by remember { mutableStateOf("") }
+        var selectedFileUri by remember { mutableStateOf<android.net.Uri?>(null) }
+        var uploadedFileUrl by remember { mutableStateOf("") }
+        var isUploadingFile by remember { mutableStateOf(false) }
+
+        val filePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+            contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+        ) { uri: android.net.Uri? ->
+            if (uri != null) {
+                selectedFileUri = uri
+                isUploadingFile = true
+                mainViewModel.uploadMediaFile(uri, "study_materials", isPdf = true) { url ->
+                    uploadedFileUrl = url
+                    isUploadingFile = false
+                }
+            }
+        }
 
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
@@ -361,6 +419,31 @@ fun AdminMaterialsTab(mainViewModel: MainViewModel) {
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(value = type, onValueChange = { type = it }, label = { Text("પ્રકાર (નોટ્સ/શોર્ટ ટ્રીક્સ/PDF)") }, modifier = Modifier.fillMaxWidth())
                         Spacer(modifier = Modifier.height(6.dp))
+
+                        // Cloud PDF / Document Upload
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            OutlinedButton(
+                                onClick = { filePickerLauncher.launch("*/*") },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (selectedFileUri != null) "ફાઇલ પસંદ કરેલ છે (બદલો)" else "PDF / ફાઇલ અપલોડ કરો", fontSize = 12.sp)
+                            }
+                            if (isUploadingFile) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            }
+                        }
+                        if (uploadedFileUrl.isNotBlank()) {
+                            Text("✓ ક્લાઉડ સ્ટોરેજ પર ફાઇલ અપલોડ થયેલ છે", fontSize = 11.sp, color = Color(0xFF10B981))
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+
                         OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("ટૂંકું વર્ણન") }, modifier = Modifier.fillMaxWidth())
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(value = content, onValueChange = { content = it }, label = { Text("સંપૂર્ણ નોટ્સ લખાણ") }, modifier = Modifier.fillMaxWidth(), maxLines = 5)
@@ -376,9 +459,11 @@ fun AdminMaterialsTab(mainViewModel: MainViewModel) {
                                     title = title,
                                     subject = sub,
                                     topic = topic,
-                                    type = type,
+                                    type = if (uploadedFileUrl.isNotBlank()) "PDF" else type,
                                     description = desc,
-                                    contentText = content
+                                    contentText = content,
+                                    fileUrl = uploadedFileUrl,
+                                    fileSize = if (uploadedFileUrl.isNotBlank()) "PDF File" else ""
                                 )
                             )
                             showAddDialog = false
